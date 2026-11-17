@@ -502,6 +502,13 @@ search window. Child features are expected to lie within their parent gene's
 annotated span. A missing structural field means no resolved overlap;
 this also occurs when the input lacks the necessary child features.
 
+**Multipart genes with multipart transcripts are unsupported for
+transcript-derived annotations.** Complete transcript validation assumes the
+parent span is discoverable from the queried gene rows; genecontext does not
+discover every gene part by ID. A narrow query can therefore miss a conflicting
+transcript part that a wider query would reject. This limitation applies to
+both indexed and automatically prepared annotations.
+
 ### Chromosome names
 
 Use an annotation release matching the VCF's genome assembly. Contig names
@@ -789,10 +796,10 @@ resolution, gene filters, and annotation calculations. Child features of
 filtered-out genes cannot contribute results. A prepared input is scanned
 in full; the direct path validates only queried feature rows.
 
-For transcript-based annotations, the reader retrieves complete annotated
-spans of genes intersecting the initial query and passing the gene filters.
-This makes transcript validation independent of which parts intersect the
-query and supplies flanking exons for intron calculations. Additional genes
+For transcript-based annotations, the reader retrieves the annotated spans
+of eligible gene rows intersecting the initial query. This supplies transcript
+and flanking-exon context within those spans, subject to the
+[multipart parent limitation](#feature-types-and-attributes). Additional genes
 outside the original query do not become eligible. Nearest, neighborhood,
 and promoter annotations still apply their configured distance limits.
 
