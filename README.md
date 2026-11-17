@@ -1,5 +1,7 @@
 # genecontext
 
+[![Build and test](https://github.com/bgorm/genecontext/actions/workflows/build.yml/badge.svg)](https://github.com/bgorm/genecontext/actions/workflows/build.yml)
+
 Annotate VCF/BCF variants with nearby genes using a GTF or GFF3 annotation.
 **Genecontext is a streaming [bcftools](https://github.com/samtools/bcftools) plugin:** it adds INFO fields while
 preserving the original variants, samples, and FORMAT fields.
@@ -152,6 +154,10 @@ export BCFTOOLS_PLUGINS="$HOME/.local/libexec/bcftools:${BCFTOOLS_PLUGINS:-}"
 
 `DESTDIR` is supported for staging. Run `make test` for the synthetic
 integration suite; tests require Python 3, bcftools, bgzip, and tabix.
+
+The [build workflow](.github/workflows/build.yml) runs on Linux and macOS with
+bcftools/HTSlib 1.25. It tests the plugin, checks installation, and repeats the
+integration suite in a fresh public source export.
 
 ### Worked example dependencies
 

@@ -23,6 +23,7 @@ files=(
     src/options.hpp src/plugin.cpp src/store.hpp
     scripts/bootstrap.sh scripts/export-plugin.sh
     tests/helpers.py tests/test_genecontext.py tests/test_transcripts.py
+    .github/workflows/build.yml
 )
 for file in "${files[@]}"; do
     [[ -f $file && ! -L $file ]] || { echo "Missing or symlinked source file: $file" >&2; exit 1; }
