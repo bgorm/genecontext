@@ -41,7 +41,7 @@ describes the output groups.
 <!-- BEGIN GENECONTEXT HELP -->
 ```text
 About: Annotate variant gene neighborhoods from GTF/GFF3 in a bcftools stream.
-(genecontext version 0.2.1)
+(genecontext version 0.2.2)
 
 Usage: bcftools +genecontext [General Options] <in.vcf|in.bcf|-> -- [Plugin Options]
 
@@ -138,8 +138,8 @@ make -j4 PLUGIN_HTSLIB=/path/to/include PLUGIN_HTSLIB_VERSION=1.25
 Run `make clean` before changing the host version, compiler, or build flags.
 Standard `CPPFLAGS`, `CXXFLAGS`, `LDFLAGS`, and `LDLIBS` are supported. The
 plugin checks bcftools and HTSlib versions when loaded and resolves HTSlib
-symbols from its host. Linux with bcftools/HTSlib 1.25 is tested; the Makefile
-includes macOS linker settings, but macOS compatibility has not been verified.
+symbols from its host. Builds and integration tests with bcftools/HTSlib 1.25
+have passed on Linux and macOS in [GitHub Actions](https://github.com/bgorm/genecontext/actions/runs/44137618439).
 
 ### Install and test
 
@@ -444,11 +444,23 @@ The default feature types are `gene,pseudogene,ncRNA_gene`. Override them with
 `--features` for providers using different gene-level features. The plugin
 does not reconstruct genes from transcript/exon-only annotations.
 
-Transcript features default to `transcript,mRNA,ncRNA,lnc_RNA,lncRNA,tRNA,rRNA,`
-`miRNA,pre_miRNA,snRNA,snoRNA,scRNA,primary_transcript`. Override this list with
-`--transcript-features` for another provider. Gene and transcript feature
-types must be distinct when transcript annotations are requested. `exon`
-and `CDS` are reserved for structural features in these modes.
+Default transcript feature types include:
+
+- `transcript`, `mRNA`, `ncRNA`, `lnc_RNA`, `lncRNA`, `tRNA`, `rRNA`, `miRNA`,
+  `pre_miRNA`, `snRNA`, `snoRNA`, `scRNA`, `primary_transcript`.
+- `pseudogenic_transcript`, `V_gene_segment`, `D_gene_segment`, `J_gene_segment`,
+  `C_gene_segment`, `VD_gene_segment`.
+- `RNA`, `lincRNA`, `nc_primary_transcript`, `processed_transcript`,
+  `aberrant_processed_transcript`, `NMD_transcript_variant`.
+
+These cover the transcript families in Ensembl's
+[GFF3 mapping](https://www.ensembl.info/2017/07/06/gff3-and-sequence-ontology-terms/)
+and the transcript-level terms accepted by its
+[release 116 GFF reader](https://github.com/Ensembl/ensembl-vep/blob/release/116/modules/Bio/EnsEMBL/VEP/AnnotationSource/File/GFF.pm).
+`--transcript-features` **replaces** the entire list; retain any default types
+you still need when supplying custom types. Gene and transcript feature types
+must be distinct when transcript annotations are requested. `exon` and `CDS`
+are reserved for structural features in these modes.
 
 Attributes are normalized as follows, using the first nonempty value:
 
@@ -478,9 +490,12 @@ are preserved as part of the ID, not treated as parent-list separators.
 Children without a resolvable eligible gene are omitted. GTF exons with
 explicit gene/transcript IDs can supply introns even when the file lacks a
 transcript row; they cannot supply a tagged transcript TSS or qualify for
-`--feature-transcripts canonical`. Conflicting or multipart coordinates for
-the same resolved transcript ID produce an error instead of choosing an
-arbitrary boundary. A missing structural field means no resolved overlap;
+`--feature-transcripts canonical`. Transcript-based annotations load the full
+annotated spans of candidate genes before resolving their children. Conflicting
+or multipart coordinates for the same resolved transcript ID within those
+spans produce an error, including when only one part intersects the original
+search window. Child features are expected to lie within their parent gene's
+annotated span. A missing structural field means no resolved overlap;
 this also occurs when the input lacks the necessary child features.
 
 ### Chromosome names
@@ -539,8 +554,8 @@ For a gene spanning inclusive coordinates `[start,end]`:
 `--max-distance` limits nearest body/TSS/flank searches; `--window` separately
 limits both neighborhood lists, the map, relationships, and the neighborhood
 count. Limits are inclusive. Zero permits exact overlaps only. Both options
-accept integer base pairs up to 2,147,483,647; no search expands beyond the
-specified limit.
+accept integer base pairs up to 2,147,483,647. Fetching complete gene models
+does not relax these annotation limits.
 Promoter widths have their own limits and do not depend on these two options.
 Exon/CDS/intron output tests POS directly, independently of either window.
 
@@ -550,6 +565,10 @@ their signed distance, then gene coordinates. Exact duplicate features are
 removed. Multiple rows with the same identifier are treated as separate parts
 of one gene: each metric chooses the nearest part and reports the ID once,
 without filling any gap between parts. Filters are applied before this step.
+Flanks exclude a gene ID from both sides if **any part contains POS**. Otherwise,
+the nearest part on each side is eligible; a variant in a gap can have the same
+multipart gene as both flanks. TSS and promoter detail fields report each unique
+gene ID/TSS position/transcript/strand combination once.
 
 ### TSS selection and Open Targets
 
@@ -766,10 +785,12 @@ resolution, gene filters, and annotation calculations. Child features of
 filtered-out genes cannot contribute results. A prepared input is scanned
 in full; the direct path validates only queried feature rows.
 
-For intron queries, a variant inside a gene causes the reader to retrieve
-the complete annotated gene span when needed, even if its flanking exons
-lie outside the initial window. This supplies the exon structure needed to
-establish a genuine internal gap; it does not widen the nearest-gene search.
+For transcript-based annotations, the reader retrieves complete annotated
+spans of genes intersecting the initial query and passing the gene filters.
+This makes transcript validation independent of which parts intersect the
+query and supplies flanking exons for intron calculations. Additional genes
+outside the original query do not become eligible. Nearest, neighborhood,
+and promoter annotations still apply their configured distance limits.
 
 `--sort-mem` is a sort-buffer target, not a total process-memory limit. A
 single record, merge buffers, the tabix index, and features in the current

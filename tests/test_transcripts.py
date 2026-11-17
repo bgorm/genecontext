@@ -281,6 +281,90 @@ class TranscriptTests(PluginFixture):
             self.assertIn(b"Conflicting or multipart transcript coordinates", result.stderr)
             self.assert_clean()
 
+    def test_default_ensembl_transcript_types_resolve_tss_and_children(self):
+        # Transcript-level terms supported by Ensembl's release 116 GFF reader,
+        # including pseudogenic, immune-segment, and older RNA terms. These are
+        # synthetic models that isolate feature-type and parent resolution.
+        kinds = ["mRNA", "ncRNA", "lnc_RNA", "miRNA", "snRNA", "snoRNA", "rRNA", "tRNA",
+                 "pseudogenic_transcript", "V_gene_segment", "D_gene_segment", "J_gene_segment",
+                 "C_gene_segment", "VD_gene_segment", "RNA", "lincRNA", "nc_primary_transcript",
+                 "processed_transcript", "aberrant_processed_transcript", "NMD_transcript_variant"]
+        lines, expected = [], {}
+        for i, kind in enumerate(kinds):
+            start, end = 1000 * (i + 1), 1000 * (i + 1) + 100
+            strand = "+" if i % 2 == 0 else "-"
+            tss = start + 20 if strand == "+" else end - 20
+            gid, tid = f"G{i}", f"T{i}"
+            coding = kind == "mRNA" or kind.endswith("_gene_segment")
+            biotype = "protein_coding" if coding else "lncRNA"
+            lines.append(f"chr1\ttest\tgene\t{start}\t{end}\t.\t{strand}\t.\t"
+                         f"ID=gene:{gid};gene_id={gid};Name={gid};biotype={biotype}\n")
+            lines.append(f"chr1\ttest\t{kind}\t{start+20}\t{end-20}\t.\t{strand}\t.\t"
+                         f"ID=transcript:{tid};transcript_id={tid};Parent=gene:{gid};"
+                         "tag=basic,Ensembl_canonical\n")
+            for feature in (["exon", "CDS"] if coding else ["exon"]):
+                phase = "0" if feature == "CDS" else "."
+                lines.append(f"chr1\ttest\t{feature}\t{start+20}\t{end-20}\t.\t{strand}\t{phase}\t"
+                             f"Parent=transcript:{tid}\n")
+            expected[tss] = (gid, tid, strand, coding)
+        source = self.d / "ensembl-types.gff3"
+        source.write_text("".join(lines))
+        vcf = self.write_vcf(sorted(expected))
+        for annotation in [source, self.indexed_annotation(source, "csi"), self.indexed_annotation(source, "tbi")]:
+            out = self.infos(self.run_plugin("--emit", "all", "--tss-source", "canonical",
+                                            "--feature-transcripts", "canonical", "--max-distance", "0",
+                                            "--window", "0", "--promoter-upstream", "0",
+                                            "--promoter-downstream", "0", annotation=annotation, source=vcf))
+            for pos, (gid, tid, strand, coding) in expected.items():
+                with self.subTest(annotation=annotation.name, transcript=tid):
+                    self.assertEqual(out[pos].get("GC_TSS_DETAIL"), f"{gid}|{gid}|{tid}|{pos}|{strand}|canonical")
+                    self.assertEqual(out[pos].get("GC_TSS_DISTANCE"), "0")
+                    self.assertEqual(out[pos].get("GC_PROMOTER"), gid)
+                    self.assertEqual(out[pos].get("GC_EXON"), gid)
+                    self.assertEqual(out[pos].get("GC_CDS"), gid if coding else None)
+            self.assert_clean()
+
+    def test_multipart_transcript_errors_do_not_depend_on_query_radius(self):
+        vcf = self.write_vcf([850])
+        for strand in ["+", "-"]:
+            genes = [(100, 1000, "G1", "A", strand, "protein_coding")]
+            transcripts = [(100, 200, "T1", "G1", strand, ["Ensembl_canonical"]),
+                           (800, 900, "T1", "G1", strand, ["Ensembl_canonical"])]
+            for fmt in ["gtf", "gff3"]:
+                model = self.write_models(fmt, genes, transcripts, [(800, 900, "T1", "G1", "exon")])
+                source = self.d / f"multipart-{strand}.{fmt}"
+                source.write_text(model.read_text())
+                for annotation in [source, self.indexed_annotation(source, "csi"), self.indexed_annotation(source, "tbi")]:
+                    for radius in [0, 100, 1000]:
+                        for emit in ["nearest-tss,tss-distance,tss-details", "exon"]:
+                            with self.subTest(strand=strand, annotation=annotation.name, radius=radius, emit=emit):
+                                result = self.run_plugin("--tss-source", "canonical", "--emit", emit,
+                                                         "--max-distance", str(radius), "--window", "0",
+                                                         annotation=annotation, source=vcf, success=False)
+                                self.assertNotEqual(result.returncode, 0)
+                                self.assertIn(b"Conflicting or multipart transcript coordinates: T1", result.stderr)
+                                self.assert_clean()
+
+    def test_full_gene_context_preserves_original_eligibility_limits(self):
+        # B's invalid model is inside A's span but outside the original query.
+        # Loading it must not make B eligible or cause an unrelated error.
+        genes = [(100, 1000, "G1", "A", "+", "protein_coding"),
+                 (200, 300, "G2", "B", "+", "protein_coding")]
+        transcripts = [(100, 200, "T1", "G1", "+", ["Ensembl_canonical"]),
+                       (200, 220, "T2", "G2", "+", ["Ensembl_canonical"]),
+                       (280, 300, "T2", "G2", "+", ["Ensembl_canonical"])]
+        vcf = self.write_vcf([850])
+        source = self.write_models("gff3", genes, transcripts, [])
+        for annotation in [source, self.indexed_annotation(source)]:
+            out = self.infos(self.run_plugin("--emit", "nearest,nearest-tss,tss-details,neighbors-tss,promoter",
+                                            "--tss-source", "canonical", "--max-distance", "100", "--window", "0",
+                                            "--promoter-upstream", "0", "--promoter-downstream", "0",
+                                            annotation=annotation, source=vcf))[850]
+            self.assertEqual(out["GC_NEAREST"], "A")
+            for field in ["GC_TSS", "GC_TSS_DETAIL", "GC_TSS_NEIGHBORS", "GC_PROMOTER"]:
+                self.assertNotIn(field, out)
+            self.assert_clean()
+
     def test_child_without_transcript_is_not_used_to_invent_introns(self):
         source = self.d / "direct.gff3"
         source.write_text("chr1\tx\tgene\t1000\t3000\t.\t+\t.\tID=gene:G1;gene_id=G1;Name=A\n"

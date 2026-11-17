@@ -24,9 +24,9 @@ inline const std::array<Field,28> fields{{
     {"biotype", "BIOTYPE", ".", "String", "Biotypes of nearest gene bodies; aligned with NEAREST; dot if unavailable"},
     {"strand", "STRAND", ".", "String", "Strands of nearest gene bodies; aligned with NEAREST; dot if unknown"},
     {"flanks", "LEFT", ".", "String", "Nearest nonoverlapping genes on the genomic left within max-distance; all ties"},
-    {"flanks", "LEFT_DISTANCE", "1", "Integer", "Absolute bp distance from POS to the nearest gene body wholly on its genomic left"},
+    {"flanks", "LEFT_DISTANCE", "1", "Integer", "Absolute bp distance to the nearest gene part on the genomic left; overlapping gene IDs excluded"},
     {"flanks", "RIGHT", ".", "String", "Nearest nonoverlapping genes on the genomic right within max-distance; all ties"},
-    {"flanks", "RIGHT_DISTANCE", "1", "Integer", "Absolute bp distance from POS to the nearest gene body wholly on its genomic right"},
+    {"flanks", "RIGHT_DISTANCE", "1", "Integer", "Absolute bp distance to the nearest gene part on the genomic right; overlapping gene IDs excluded"},
     {"count", "N_GENES", "1", "Integer", "Number of distinct eligible gene IDs with body distance at most window from POS"},
     {"overlap-count", "N_OVERLAP", "1", "Integer", "Number of distinct eligible gene IDs whose bodies contain POS"},
     {"tss-details", "TSS_DETAIL", ".", "String", "Nearest TSS sites as GENE|GENE_ID|TRANSCRIPT_ID|TSS|STRAND|SOURCE; all tied sites; transcript dot for gene boundaries"},
@@ -80,9 +80,16 @@ inline int64_t magnitude(int64_t value) { return value < 0 ? -value : value; }
 // supplies its annotation. Never join different IDs just because names coincide.
 inline std::vector<Hit> body_hits(const std::vector<Gene>& genes, int64_t pos, int64_t limit,
                                   GenomicSide side = GenomicSide::Either) {
+    std::set<std::string> overlapping;
+    if (side != GenomicSide::Either) {
+        for (const auto& gene : genes) {
+            if (gene.signed_body_distance(pos) == 0) overlapping.insert(gene.id);
+        }
+    }
     std::unordered_map<std::string,size_t> by_id;
     std::vector<Hit> result;
     for (const auto& gene : genes) {
+        if (overlapping.count(gene.id)) continue;
         const int64_t distance = gene.signed_body_distance(pos);
         if (magnitude(distance) > limit) continue;
         if (side == GenomicSide::Left && distance >= 0) continue;
@@ -157,6 +164,7 @@ struct TssSite {
     std::string transcript;
     int64_t position;
     char strand;
+    auto identity() const { return std::tie(gene->id,position,transcript,strand); }
 };
 inline std::vector<TssSite> tss_sites(const GeneModel& model, const AnnotationOptions& options) {
     std::vector<TssSite> result;
@@ -175,8 +183,11 @@ inline std::vector<TssSite> tss_sites(const GeneModel& model, const AnnotationOp
         return std::tuple_cat(a.gene->key(),std::tie(a.position,a.transcript,a.strand)) <
                std::tuple_cat(b.gene->key(),std::tie(b.position,b.transcript,b.strand));
     });
-    result.erase(std::unique(result.begin(),result.end(),[](const TssSite& a, const TssSite& b) {
-        return a.gene->id == b.gene->id && a.position == b.position && a.transcript == b.transcript && a.strand == b.strand;
+    // Coordinate order can interleave identical sites from multipart genes.
+    // Keep the first representative in presentation order, once per identity.
+    std::set<std::tuple<std::string,int64_t,std::string,char>> seen;
+    result.erase(std::remove_if(result.begin(),result.end(),[&](const TssSite& site) {
+        return !seen.insert(site.identity()).second;
     }),result.end());
     return result;
 }

@@ -8,7 +8,7 @@
 #ifndef GC_HTSLIB_VERSION
 #error Build with the target HTSlib version
 #endif
-#define GC_VERSION "0.2.1"
+#define GC_VERSION "0.2.2"
 #define GC_EXPORT extern "C" __attribute__((visibility("default")))
 extern "C" const char* bcftools_version(void);
 
@@ -182,7 +182,7 @@ class Context {
 
         const int64_t pos = zero_based_pos + 1;
         const int64_t radius = options_.annotation.radius();
-        const auto model = store_->query(chrom, std::max<int64_t>(1, pos - radius), pos + radius, pos);
+        const auto model = store_->query(chrom, std::max<int64_t>(1, pos - radius), pos + radius);
         return annotate(model, pos, options_.annotation);
     }
 

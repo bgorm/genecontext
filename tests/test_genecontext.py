@@ -151,6 +151,44 @@ class PluginTests(PluginFixture):
         self.assertNotIn("GC_OVERLAP", out[250])
         self.assertEqual(out[250]["GC_N_GENES"], "1")
 
+    def test_flanks_exclude_every_part_of_an_overlapping_gene(self):
+        self.genes.write_text(gtf(1, 50, "LEFT") + gtf(100, 200, "PART") +
+                              gtf(300, 400, "PART") + gtf(500, 600, "RIGHT"))
+        source = self.write_vcf([100, 150, 200, 250, 300, 350, 400])
+        for annotation in [self.genes, self.indexed_annotation(kind="csi"), self.indexed_annotation(kind="tbi")]:
+            out = self.infos(self.run_plugin("--emit", "overlap,flanks", source=source, annotation=annotation))
+            for pos in [100, 150, 200, 300, 350, 400]:
+                with self.subTest(annotation=annotation.name, pos=pos):
+                    self.assertEqual(out[pos]["GC_OVERLAP"], "PART")
+                    self.assertEqual(out[pos]["GC_LEFT"], "LEFT")
+                    self.assertEqual(out[pos]["GC_LEFT_DISTANCE"], str(pos - 50))
+                    self.assertEqual(out[pos]["GC_RIGHT"], "RIGHT")
+                    self.assertEqual(out[pos]["GC_RIGHT_DISTANCE"], str(500 - pos))
+            # An unfilled gap overlaps neither part: both sides can use PART.
+            self.assertNotIn("GC_OVERLAP", out[250])
+            self.assertEqual(out[250]["GC_LEFT"], "PART")
+            self.assertEqual(out[250]["GC_RIGHT"], "PART")
+            self.assertEqual(out[250]["GC_LEFT_DISTANCE"], "50")
+            self.assertEqual(out[250]["GC_RIGHT_DISTANCE"], "50")
+            self.assert_clean()
+
+    def test_multipart_tss_sites_are_unique_despite_interleaved_genes(self):
+        for strand, intervals, pos in [("+", [(100, 200), (100, 250), (100, 300)], 100),
+                                       ("-", [(100, 400), (150, 400), (200, 400)], 400)]:
+            self.genes = self.d / f"multipart-tss-{strand}.gtf"
+            self.genes.write_text("".join(gtf(start, end, name, strand, gene_id=gid)
+                                         for (start, end), name, gid in zip(intervals, ["A", "B", "A"], ["G", "H", "G"])))
+            source = self.write_vcf([pos])
+            for annotation in [self.genes, self.indexed_annotation(kind="csi"), self.indexed_annotation(kind="tbi")]:
+                with self.subTest(strand=strand, annotation=annotation.name):
+                    out = self.infos(self.run_plugin("--emit", "nearest-tss,tss-details,promoter",
+                                                    "--promoter-upstream", "0", "--promoter-downstream", "0",
+                                                    annotation=annotation, source=source))[pos]
+                    self.assertEqual(out["GC_TSS"], "A,B")
+                    self.assertEqual(out["GC_TSS_DETAIL"], f"A|G|.|{pos}|{strand}|gene,B|H|.|{pos}|{strand}|gene")
+                    self.assertEqual(out["GC_PROMOTER_DETAIL"], f"A|G|.|{pos}|{strand}|0,B|H|.|{pos}|{strand}|0")
+                    self.assert_clean()
+
     def test_zero_and_exact_limits(self):
         out = self.infos(self.run_plugin("--max-distance", "0", "--window", "0", "--emit", "all"))
         self.assertEqual(out[100]["GC_TSS_DISTANCE"], "0")

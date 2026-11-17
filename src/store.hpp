@@ -150,7 +150,6 @@ struct StoreOptions {
     size_t sort_bytes = 64*1024*1024;
     GeneFilter filter;
     FeatureSelection selection;
-    bool intron_context = false;
     bool quiet = false;
 };
 class GeneStore {
@@ -286,15 +285,17 @@ public:
     bool has_contig(const std::string& contig) const {
         return prepared_ ? source_contigs_.count(contig) : tbx_name2id(index_.get(),contig.c_str()) >= 0;
     }
-    GeneModel query(const std::string& contig, int64_t start, int64_t end, int64_t pos) {
+    GeneModel query(const std::string& contig, int64_t start, int64_t end) {
         auto features = read_features(contig,start,end);
-        if (options_.intron_context) {
-            // Exons flanking an intronic POS need not intersect the original
-            // window. Fetch complete gene spans only for genes containing POS.
+        if (options_.selection.transcripts) {
+            // Resolve transcript models across each candidate gene's full span.
+            // Otherwise a narrow query can hide a conflicting transcript part
+            // or omit the exons flanking an intron. Eligibility still uses the
+            // original window below, including for genes found during expansion.
             int64_t full_start = start, full_end = end;
             for (const auto& feature : features) {
                 const auto& gene = feature.region;
-                if (feature.kind != FeatureKind::Gene || !options_.filter.accepts(gene) || pos < gene.start || pos > gene.end) continue;
+                if (feature.kind != FeatureKind::Gene || !options_.filter.accepts(gene)) continue;
                 full_start = std::min(full_start,gene.start);
                 full_end = std::max(full_end,gene.end);
             }

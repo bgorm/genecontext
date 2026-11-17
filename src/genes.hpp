@@ -39,7 +39,10 @@ struct GeneFilter {
     Format format = Format::Auto;
     std::set<std::string> features{"gene","pseudogene","ncRNA_gene"};
     std::set<std::string> transcript_features{"transcript","mRNA","ncRNA","lnc_RNA","lncRNA",
-        "tRNA","rRNA","miRNA","pre_miRNA","snRNA","snoRNA","scRNA","primary_transcript"};
+        "tRNA","rRNA","miRNA","pre_miRNA","snRNA","snoRNA","scRNA","primary_transcript",
+        "pseudogenic_transcript","V_gene_segment","D_gene_segment","J_gene_segment","C_gene_segment",
+        "VD_gene_segment","RNA","lincRNA","nc_primary_transcript","processed_transcript",
+        "aberrant_processed_transcript","NMD_transcript_variant"};
     std::set<std::string> include, exclude;
     bool accepts(const Gene& gene) const {
         return (include.empty() || include.count(gene.biotype)) && !exclude.count(gene.biotype);

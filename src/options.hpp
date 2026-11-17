@@ -126,7 +126,6 @@ inline Options parse_options(int argc, char** argv, const char* help) {
     require(!result.store.annotation.empty(),"--annotation is required after --");
     // Feature requirements depend on the final --emit and transcript settings.
     result.store.selection = result.annotation.selection();
-    result.store.intron_context = result.annotation.intron_context();
     if (result.store.selection.transcripts) {
         for (const auto& feature : result.store.filter.transcript_features)
             require(!result.store.filter.features.count(feature),"Gene and transcript feature types overlap: "+feature);
