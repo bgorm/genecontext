@@ -23,6 +23,8 @@ files=(
     src/options.hpp src/plugin.cpp src/store.hpp
     scripts/bootstrap.sh scripts/export-plugin.sh
     tests/helpers.py tests/test_genecontext.py tests/test_transcripts.py
+    tests/test_ensembl.py tests/fixtures/ensembl116.gff3
+    tests/fixtures/ensembl116-canonical.tsv tests/fixtures/README.md
     .github/workflows/build.yml
 )
 for file in "${files[@]}"; do

@@ -8,7 +8,7 @@
 #ifndef GC_HTSLIB_VERSION
 #error Build with the target HTSlib version
 #endif
-#define GC_VERSION "0.2.2"
+#define GC_VERSION "0.2.3"
 #define GC_EXPORT extern "C" __attribute__((visibility("default")))
 extern "C" const char* bcftools_version(void);
 

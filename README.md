@@ -41,7 +41,7 @@ describes the output groups.
 <!-- BEGIN GENECONTEXT HELP -->
 ```text
 About: Annotate variant gene neighborhoods from GTF/GFF3 in a bcftools stream.
-(genecontext version 0.2.2)
+(genecontext version 0.2.3)
 
 Usage: bcftools +genecontext [General Options] <in.vcf|in.bcf|-> -- [Plugin Options]
 
@@ -152,8 +152,10 @@ make install plugindir="$HOME/.local/libexec/bcftools"
 export BCFTOOLS_PLUGINS="$HOME/.local/libexec/bcftools:${BCFTOOLS_PLUGINS:-}"
 ```
 
-`DESTDIR` is supported for staging. Run `make test` for the synthetic
-integration suite; tests require Python 3, bcftools, bgzip, and tabix.
+`DESTDIR` is supported for staging. Run `make test` for the integration suite,
+which includes synthetic cases and [small Ensembl 116 fixtures](tests/fixtures/README.md).
+Tests require Python 3, bcftools, bgzip, and tabix; no annotation downloads
+are needed to run them.
 
 The [build workflow](.github/workflows/build.yml) runs on Linux and macOS with
 bcftools/HTSlib 1.25. It tests the plugin, checks installation, and repeats the
@@ -448,8 +450,8 @@ Default transcript feature types include:
 
 - `transcript`, `mRNA`, `ncRNA`, `lnc_RNA`, `lncRNA`, `tRNA`, `rRNA`, `miRNA`,
   `pre_miRNA`, `snRNA`, `snoRNA`, `scRNA`, `primary_transcript`.
-- `pseudogenic_transcript`, `V_gene_segment`, `D_gene_segment`, `J_gene_segment`,
-  `C_gene_segment`, `VD_gene_segment`.
+- `pseudogenic_transcript`, `unconfirmed_transcript`, `V_gene_segment`,
+  `D_gene_segment`, `J_gene_segment`, `C_gene_segment`, `VD_gene_segment`.
 - `RNA`, `lincRNA`, `nc_primary_transcript`, `processed_transcript`,
   `aberrant_processed_transcript`, `NMD_transcript_variant`.
 
@@ -457,6 +459,8 @@ These cover the transcript families in Ensembl's
 [GFF3 mapping](https://www.ensembl.info/2017/07/06/gff3-and-sequence-ontology-terms/)
 and the transcript-level terms accepted by its
 [release 116 GFF reader](https://github.com/Ensembl/ensembl-vep/blob/release/116/modules/Bio/EnsEMBL/VEP/AnnotationSource/File/GFF.pm).
+The defaults also cover all 16 transcript feature types observed in the
+human release 116 GFF3, including `unconfirmed_transcript` for TEC models.
 `--transcript-features` **replaces** the entire list; retain any default types
 you still need when supplying custom types. Gene and transcript feature types
 must be distinct when transcript annotations are requested. `exon` and `CDS`

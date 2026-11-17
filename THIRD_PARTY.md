@@ -28,4 +28,8 @@ HTSlib and bcftools are external MIT/Expat-licensed dependencies from
 [samtools](https://www.htslib.org/). The plugin uses their headers and resolves
 HTSlib symbols from its host. It does not bundle or link an additional HTSlib.
 The optional bootstrap downloads the HTSlib source archive, which retains its
-own license notices. No gene annotation datasets are distributed here.
+own license notices.
+
+The small gene annotation fixture under `tests/fixtures/` contains unmodified
+Ensembl release 116 records. Source URLs, checksums, selection rules, and
+coverage are documented in [the fixture notes](tests/fixtures/README.md).
